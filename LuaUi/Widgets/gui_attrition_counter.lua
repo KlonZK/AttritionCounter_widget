@@ -350,15 +350,10 @@ function CreateWindow()
 	label_rate_player = Label:New {		
 		parent = window_main,
 		x = (window_main.width / 2) - (font:GetTextWidth('---', 30) / 2), -- window_main.width * 0.415,
-		y = 15,
-		--align = 'center',
+		y = 15,		
 		fontSize = 30,
 		textColor = grey,
-		caption = '---',
-		--minWidth = 80,
-		--width = 80,
-		--left = 250,
-		--right = 250,		
+		caption = '---',			
 	}
 	
 	-- first team labels
@@ -371,18 +366,7 @@ function CreateWindow()
 		caption = allyTeams[myAllyTeam].name,
 		textColor = allyTeams[myAllyTeam].color,
 		tooltip = '',
-		HitTest = function (self, x, y) return self end,
-		--[[
-		OnMouseOver = {function(self) 
-			local at = allyTeams[myAllyTeam]			
-			local ttip = at.color.asString..at.name..'\n\n'..'\008'..'Units Lost: \t\t\t'..floor(at.lostUnits)
-				..'\nMetal Lost: \t\t\t'..floor(at.lostMetal)..'\n\n\nLost Units / Metal by Player:\n\n'
-			for team, _ in pairs (at.teamIDs) do
-				local t = teams[team]
-				ttip = ttip..t.color.asString..(t.name or 'Unnamed Player')..'\008'..':  '..floor(t.lostUnits)..' / '..floor(t.lostMetal).."\n"
-			end
-			self.tooltip = ttip
-		end},--]]
+		HitTest = function (self, x, y) return self end,		
 	}
 	label_own_kills_units = Label:New{
 		parent = window_main,
@@ -434,18 +418,7 @@ function CreateWindow()
 		align = 'right',
 		caption = allyTeams[enemyAllyTeam].name,
 		textColor = allyTeams[enemyAllyTeam].color,
-		HitTest = function (self, x, y) return self end,
-		--[[
-		OnMouseOver = {function(self) 
-			local at = allyTeams[enemyAllyTeam]			
-			local ttip = at.color.asString..at.name..'\n\n'..'\008'..'Units Lost: \t\t\t'..floor(at.lostUnits)
-				..'\nMetal Lost: \t\t\t'..floor(at.lostMetal)..'\n\n\nLost Units / Metal by Player:\n\n'
-			for team, _ in pairs (at.teamIDs) do
-				local t = teams[team]
-				ttip = ttip..t.color.asString..(t.name or 'Unnamed Player')..'\008'..':  '..floor(t.lostUnits)..' / '..floor(t.lostMetal).."\n"
-			end
-			self.tooltip = ttip
-		end},--]]	
+		HitTest = function (self, x, y) return self end,			
 	}
 	icon_other_bars = Image:New{
 		parent = window_main,
@@ -517,55 +490,3 @@ function DestroyWindow()
 	window_main:Dispose()
 	window_main = nil
 end
-
-
-	
---[[
-	
-		
-	-- losses of defending player vs attacker + attacking team
-	local list = teams[teamdID].losses
-	Echo("check 2")
-	list[attTeamID] = list[attTeamID] + worth
-	Echo("check 3")
-	list[attAllyTeamID] = list[attAllyTeamID] + worth
-	Echo("check 4")
-	list[total] = list[total] + worth	
-	Echo("check 5")
-	
-	-- losses of defending team vs attacker + attacking team
-	list = allyTeams[allyTeamID].losses
-	list[attTeamID] = list[attTeamID] + worth
-	list[attAllyTeamID] = list[attAllyTeamID] + worth
-	list[total] = list[total] + worth	
-	
-	-- defender vs attacker
-	local a = teams[teamID].losses[attTeamID]; local b = teams[attTeamID].losses[teamID]
-	teams[teamID].rate[attTeamID] = b / a
-	teams[attTeamID].rate[teamID] = a / b
-	-- defender vs attacking team
-	a = teams[teamID].losses[attAllyTeamID]; b = teams[attAllyTeamID].losses[teamID]
-	teams[teamID].rate[attAllyTeamID] = b / a
-	teams[attAllyTeamID].rate[teamID] = a / b
-	-- defending team vs attacking team
-	a = teams[allyTeamID].losses[attAllyTeamID]; b = teams[attAllyTeamID].losses[allyTeamID]
-	teams[allyTeamID].rate[attAllyTeamID] = b / a
-	teams[attAllyTeamID].rate[allyTeamID] = a / b
-	Echo("check end")
-	-- total cant be done without kills or going through all other lists, but should be same as vs. other team in team games
-	
-	--updateCounters()
-	
-	-- kills of attacking player vs defender + defending team
-	local list = teams[attTeamID].kills 
-	list[teamID] = list[teamID] + worth
-	list[allyTeamID] = list[allyTeamID] + worth
-	list[total] = list[total] + worth
-	
-	-- kills of attacking team vs defender + defending team	
-	list = allyTeams[attAllyTeamID].kills
-	list[teamID] = list[teamID] + worth
-	list[allyTeamID] = list[allyTeamID] + worth
-	list[total] = list[total] + worth
--]]
-
