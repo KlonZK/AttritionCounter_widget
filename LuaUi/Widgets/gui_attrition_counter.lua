@@ -1,4 +1,4 @@
-local version = 2.03
+local version = 2.1
 function widget:GetInfo()
   return {
     name      = "Attrition Counter",
@@ -31,8 +31,8 @@ local Image
 
 local red = {1,0,0,1}
 local green = {0,1,0,1}
-local blue = {0,0,1,1}
-local grey = {1,1,1,0.5}
+local blue = {.2,.2,1,1}
+local grey = {.5,.5,.5,1}
 local white = {1,1,1,1}
 
 local abs = math.abs
@@ -92,11 +92,8 @@ local allyTeams = {
 	--	[allyTeamID] = {
 	--		lostUnits = <number>
 	--		lostMetal = <number>
-	----		killedUnits = <number>
-	----		killedMetal = <number>
 	-- 		rate = allyTeams[other].lostMetal / lostMetal : <number>
 	--		teamIDs = { <number> = true, ... }
-	-- 		enemyTeamIDs = { <number> = true, ... } -- unused
 	--		color = {R,G,B,A, asString} <table<number, string>>
 	--		name = team or playername <string>
 	--		numPlayers = <number>
@@ -106,7 +103,95 @@ local allyTeams = {
 local frame = 0 -- options.updateFrequency.value
 local doUpdate = false
 
+
+------------------------------------------------------------------------------------------------------------------------------------
+--------------- local functions
+------------------------------------------------------------------------------------------------------------------------------------
+
 local function rgbToString(r,g,b) return '\255'..string.char(floor(r*255))..string.char(floor(g*255))..string.char(floor(b*255)) end
+local function cap (x) return math.max(math.min(x,1),0) end
+
+local function UpdateCounters()
+
+	local rate = allyTeams[myAllyTeam].rate
+	local caption	
+	if rate < 0 then caption 'N/A'; label_rate_player.font.color = grey	
+	elseif rate > 9.99 then caption = 'PWN!'; label_rate_player.font.color = blue
+	else
+		caption = tostring(floor(rate*100))..'%'		
+		label_rate_player.font.color = {
+			cap(3-rate*2),
+			cap(2*rate-1),
+			cap((rate-2) / 2),
+			1}	
+	end		
+	
+	label_rate_player:SetCaption(caption)	
+	label_rate_player.x = (window_main.width / 2) - (font:GetTextWidth(label_rate_player.caption, 30) / 2)
+	
+	label_own_kills_units:SetCaption(allyTeams[enemyAllyTeam].lostUnits)
+	label_own_kills_metal:SetCaption('/ '..floor(allyTeams[enemyAllyTeam].lostMetal))
+	
+	label_other_kills_units:SetCaption(allyTeams[myAllyTeam].lostUnits)
+	label_other_kills_metal:SetCaption(' / '..floor(allyTeams[myAllyTeam].lostMetal))
+	
+	icon_own_skull.x = font:GetTextWidth(label_own_kills_units.caption) + label_own_kills_units.x + 1; icon_own_skull:Invalidate()
+	label_own_kills_metal.x = icon_own_skull.x + 20
+	icon_own_bars.x = font:GetTextWidth(label_own_kills_metal.caption) + 1 + label_own_kills_metal.x; icon_own_bars:Invalidate()	
+	
+	label_other_kills_metal.x = icon_other_bars.x - (font:GetTextWidth(label_other_kills_metal.caption) + 1)
+	icon_other_skull.x = label_other_kills_metal.x - 17; icon_other_skull:Invalidate()
+	label_other_kills_units.x = icon_other_skull.x - (font:GetTextWidth(label_other_kills_units.caption) + 1)
+
+end
+
+
+local function UpdateTooltips()
+	local at = allyTeams[myAllyTeam]			
+	local ttip = at.color.asString..at.name..'\n\n'..'\008'..'Units Lost: \t\t\t'..floor(at.lostUnits)
+		..'\nMetal Lost: \t\t\t'..floor(at.lostMetal)..'\n\n\nLost Units / Metal by Player:\n\n'
+	for team, _ in pairs (at.teamIDs) do
+		local t = teams[team]
+		ttip = ttip..t.color.asString..(t.name or 'Unnamed Player')..'\008'..':  '..floor(t.lostUnits)..' / '..floor(t.lostMetal).."\n"
+	end
+	label_self.tooltip = ttip
+	
+	at = allyTeams[enemyAllyTeam]			
+	ttip = at.color.asString..at.name..'\n\n'..'\008'..'Units Lost: \t\t\t'..floor(at.lostUnits)
+		..'\nMetal Lost: \t\t\t'..floor(at.lostMetal)..'\n\n\nLost Units / Metal by Player:\n\n'
+	for team, _ in pairs (at.teamIDs) do
+		local t = teams[team]
+		ttip = ttip..t.color.asString..(t.name or 'Unnamed Player')..'\008'..':  '..floor(t.lostUnits)..' / '..floor(t.lostMetal).."\n"
+	end
+	label_other.tooltip = ttip
+end
+
+
+local function UpdateRates()
+	local friendTeam
+	local enemyTeam
+	
+	-- player vs enemy team average. the information is largely misleading as no connection to players' individual kills can be made
+	-- -> players with no activity at all will show good rates, more active players will show bad rates even when possibly making cost
+	--[[
+	for i, _ in pairs(teams) do	
+		enemyTeam = allyTeams[teams[i].enemyAllyTeam]
+		teams[i].rate = enemyTeam.lostMetal / (enemyTeam.numPlayers * teams[i].lostMetal)
+		
+	end
+	--]]
+	
+	friendTeam = allyTeams[myAllyTeam]
+	enemyTeam = allyTeams[enemyAllyTeam]
+	
+	friendTeam.rate = enemyTeam.lostMetal / friendTeam.lostMetal
+	enemyTeam.rate = friendTeam.lostMetal / enemyTeam.lostMetal
+end
+
+
+------------------------------------------------------------------------------------------------------------------------------------
+--------------- widget: functions
+------------------------------------------------------------------------------------------------------------------------------------
 
 function widget:Initialize()
 	Chili = WG.Chili; if (not Chili) then widgetHandler:RemoveWidget() return end
@@ -118,7 +203,7 @@ function widget:Initialize()
 	font = Chili.Font:New{} -- need this to call GetTextWidth without looking up an instance
 	
 	-- set up all the teams and allyteams and find out gamemode
-	local allAllyTeams = Spring.GetAllyTeamList()	
+	--local allAllyTeams = Spring.GetAllyTeamList()
 	local playerlist = Spring.GetPlayerList()
 		
 	myAllyTeam = Spring.GetMyAllyTeamID()
@@ -128,8 +213,7 @@ function widget:Initialize()
 	local name, spectator, teamID, allyTeamID, keys, elo
 	local i = 1; while (i <= #playerlist) do		
 		local playerID = playerlist[i]
-		name,_,spectator,teamID,allyTeamID,_,_,_,_,keys = GetPlayerInfo(playerID)
-		Echo (name)
+		name,_,spectator,teamID,allyTeamID,_,_,_,_,keys = GetPlayerInfo(playerID)		
 		elo = keys.elo
 		i = i + 1
 		if not spectator and teamID ~= gaiaTeam then			
@@ -137,7 +221,7 @@ function widget:Initialize()
 				if allyTeamID ~= myAllyTeam then 
 					enemyAllyTeam = allyTeamID; i = 1	-- found enemyAllyTeam team, now need to restart
 				elseif i == #playerlist then -- most likely chicken game etc
-					Echo("<AttritionCounter>: could not find enemy team")
+					Echo("<AttritionCounter>: could not find enemy team, disabling")
 					widgetHandler:RemoveWidget()
 					return					
 				end
@@ -151,7 +235,7 @@ function widget:Initialize()
 				teams[teamID].enemyAllyTeam = (allyTeamID == myAllyTeam and enemyAllyTeam or myAllyTeam)
 				local r,g,b,a = GetTeamColor(teamID)
 				teams[teamID].color = {r,g,b,a, asString = rgbToString(r,g,b)}
-				Echo (teamID.." - "..name..' ID: '..teamID.." friend: "..teams[teamID].friendlyAllyTeam.." enemyAllyTeam: "..teams[teamID].enemyAllyTeam..' elo: '..elo)				
+				--Echo (teamID.." - "..name..' ID: '..teamID.." friend: "..teams[teamID].friendlyAllyTeam.." enemyAllyTeam: "..teams[teamID].enemyAllyTeam..' elo: '..elo)				
 				allyTeams[allyTeamID].teamIDs[teamID] = true				
 				allyTeams[allyTeamID].numPlayers = allyTeams[allyTeamID].numPlayers + 1
 				if allyTeams[allyTeamID].highestElo then
@@ -185,72 +269,31 @@ function widget:Initialize()
 	end
 	
 	CreateWindow()
+	UpdateTooltips()
 end
+
 
 function widget:Shutdown()
 	if window_main then window_main:Dispose() end
 end
 
-local function cap (x) return math.max(math.min(x,1),0) end
 
-local function UpdateCounters()
-
-	local rate = allyTeams[myAllyTeam].rate
-	local caption	
-	if rate < 0 then caption 'N/A'; label_rate_player.font.color = {.7,.7,.7,1}	
-	elseif rate > 9.9 then caption = 'PWN!'; label_rate_player.font.color = {.2,.2,1,1}		
-	else
-		caption = tostring(floor(rate*100))..'%'		
-		label_rate_player.font.color = {
-			cap(3-rate*2),
-			cap(2*rate-1),
-			cap((rate-2) / 2),
-			1}	
-	end		
-	
-	label_rate_player:SetCaption(caption)	
-	label_rate_player.x = (window_main.width / 2) - (font:GetTextWidth(label_rate_player.caption, 30) / 2)
-	
-	label_own_kills_units:SetCaption(allyTeams[enemyAllyTeam].lostUnits)
-	label_own_kills_metal:SetCaption('/ '..floor(allyTeams[enemyAllyTeam].lostMetal))
-	
-	label_other_kills_units:SetCaption(allyTeams[myAllyTeam].lostUnits)
-	label_other_kills_metal:SetCaption(' / '..floor(allyTeams[myAllyTeam].lostMetal))
-	
-	icon_own_skull.x = font:GetTextWidth(label_own_kills_units.caption) + label_own_kills_units.x + 1; icon_own_skull:Invalidate()
-	label_own_kills_metal.x = icon_own_skull.x + 20
-	icon_own_bars.x = font:GetTextWidth(label_own_kills_metal.caption) + 1 + label_own_kills_metal.x; icon_own_bars:Invalidate()	
-	
-	label_other_kills_metal.x = icon_other_bars.x - (font:GetTextWidth(label_other_kills_metal.caption) + 1)
-	icon_other_skull.x = label_other_kills_metal.x - 17; icon_other_skull:Invalidate()
-	label_other_kills_units.x = icon_other_skull.x - (font:GetTextWidth(label_other_kills_units.caption) + 1)
-	
-end
-
-local function UpdateRates()
-	local friendTeam
-	local enemyTeam
-	
-	-- player vs enemy team average. the information is largely misleading as no connection to players' individual kills can be made
-	-- -> players with no activity at all will show good rates, more active players will show bad rates even when possibly making cost
-	--[[
-	for i, _ in pairs(teams) do	
-		enemyTeam = allyTeams[teams[i].enemyAllyTeam]
-		teams[i].rate = enemyTeam.lostMetal / (enemyTeam.numPlayers * teams[i].lostMetal)
-		
-	end
-	--]]
-	
-	friendTeam = allyTeams[myAllyTeam]
-	enemyTeam = allyTeams[enemyAllyTeam]
-	
-	friendTeam.rate = enemyTeam.lostMetal / friendTeam.lostMetal
-	enemyTeam.rate = friendTeam.lostMetal / enemyTeam.lostMetal
+function widget:GameFrame(n)
+	frame = frame - 1
+	if frame <= 0 and doUpdate or frame <= - 3000 then -- force update every so and so many seconds
+		frame = options.updateFrequency.value
+		UpdateRates()
+		UpdateCounters()
+		UpdateTooltips()
+		doUpdate = false
+	end	
 end
 
 
 function widget:UnitDestroyed(unitID, unitDefID, teamID, attUnitID, attDefID, attTeamID)		
-	if GetUnitHealth(unitID) > 0 then return end -- why
+	if teamID == gaiaTeam or GetUnitHealth(unitID) > 0 then return end
+		-- might just ignore gaia, it will set up a table for it and track its losses but nothing else will happen?
+		-- not sure about the health check?
 
 	local ud = UnitDefs[unitDefID]
 	if ud.customParams.dontcount then return end
@@ -258,20 +301,24 @@ function widget:UnitDestroyed(unitID, unitDefID, teamID, attUnitID, attDefID, at
 	local buildProgress = select(5, GetUnitHealth(unitID))
 	local worth = ud.metalCost * buildProgress
 	
-	if teamID and unitID and unitDefID and teamID ~= gaiaTeam then 	
-		-- might just ignore gaia, it will set up a table for it and track its losses but nothing else will happen?		
-		local team = teams[teamID]
-		team.lostUnits = team.lostUnits + 1
-		team.lostMetal = team.lostMetal + worth
+	-- if teamID and unitID and unitDefID and teamID ~= gaiaTeam then 	
+	local team = teams[teamID]
+	team.lostUnits = team.lostUnits + 1
+	team.lostMetal = team.lostMetal + worth
+	
+	local allyTeam = allyTeams[team.friendlyAllyTeam]
+	allyTeam.lostUnits = allyTeam.lostUnits + 1
+	allyTeam.lostMetal = allyTeam.lostMetal + worth
 		
-		local allyTeam = allyTeams[team.friendlyAllyTeam]
-		allyTeam.lostUnits = allyTeam.lostUnits + 1
-		allyTeam.lostMetal = allyTeam.lostMetal + worth
-			
-		doUpdate = true
+	doUpdate = true
 		
-	else Echo("<AttritionCounter>: missing param"..(teamID or 'teamID').." - "..(unitID or 'unitID').." - "..(unitDefID or 'UnitDefID')) return end	
+	-- else Echo("<AttritionCounter>: missing param"..(teamID or 'teamID').." - "..(unitID or 'unitID').." - "..(unitDefID or 'UnitDefID')) return end	
 end
+
+
+------------------------------------------------------------------------------------------------------------------------------------
+--------------- layout
+------------------------------------------------------------------------------------------------------------------------------------
 
 function CreateWindow()	
 	local screenWidth,screenHeight = Spring.GetWindowGeometry()
@@ -302,7 +349,7 @@ function CreateWindow()
 		
 	label_rate_player = Label:New {		
 		parent = window_main,
-		x = (window_main.width / 2) - font:GetTextWidth('---', 30), --window_main.width * 0.415,
+		x = (window_main.width / 2) - (font:GetTextWidth('---', 30) / 2), -- window_main.width * 0.415,
 		y = 15,
 		--align = 'center',
 		fontSize = 30,
@@ -325,6 +372,7 @@ function CreateWindow()
 		textColor = allyTeams[myAllyTeam].color,
 		tooltip = '',
 		HitTest = function (self, x, y) return self end,
+		--[[
 		OnMouseOver = {function(self) 
 			local at = allyTeams[myAllyTeam]			
 			local ttip = at.color.asString..at.name..'\n\n'..'\008'..'Units Lost: \t\t\t'..floor(at.lostUnits)
@@ -334,7 +382,7 @@ function CreateWindow()
 				ttip = ttip..t.color.asString..(t.name or 'Unnamed Player')..'\008'..':  '..floor(t.lostUnits)..' / '..floor(t.lostMetal).."\n"
 			end
 			self.tooltip = ttip
-		end},
+		end},--]]
 	}
 	label_own_kills_units = Label:New{
 		parent = window_main,
@@ -387,6 +435,7 @@ function CreateWindow()
 		caption = allyTeams[enemyAllyTeam].name,
 		textColor = allyTeams[enemyAllyTeam].color,
 		HitTest = function (self, x, y) return self end,
+		--[[
 		OnMouseOver = {function(self) 
 			local at = allyTeams[enemyAllyTeam]			
 			local ttip = at.color.asString..at.name..'\n\n'..'\008'..'Units Lost: \t\t\t'..floor(at.lostUnits)
@@ -396,7 +445,7 @@ function CreateWindow()
 				ttip = ttip..t.color.asString..(t.name or 'Unnamed Player')..'\008'..':  '..floor(t.lostUnits)..' / '..floor(t.lostMetal).."\n"
 			end
 			self.tooltip = ttip
-		end},		
+		end},--]]	
 	}
 	icon_other_bars = Image:New{
 		parent = window_main,
@@ -447,8 +496,7 @@ function CreateWindow()
 	
 	window_main.OnResize = {
 		function(self,...)		
-			label_rate_player.x = (self.clientWidth / 2) - (font:GetTextWidth('---', 30) / 2)
-			label_rate_player:Invalidate()
+			label_rate_player.x = (self.clientWidth / 2) - (font:GetTextWidth('---', 30) / 2); label_rate_player:Invalidate()
 			
 			icon_own_skull.x = font:GetTextWidth(label_own_kills_units.caption) + label_own_kills_units.x + 1; icon_own_skull:Invalidate()
 			label_own_kills_metal.x = icon_own_skull.x + 20
@@ -464,20 +512,12 @@ function CreateWindow()
 	return
 end
 
+
 function DestroyWindow()
 	window_main:Dispose()
 	window_main = nil
 end
 
-function GameFrame(n)
-	frame = frame - 1
-	if frame <= 0 and doUpdate or frame <= - 3000 then -- force update every so and so many seconds
-		frame = options.updateFrequency.value
-		UpdateRates()
-		UpdateCounters()
-		doUpdate = false
-	end	
-end
 
 	
 --[[
